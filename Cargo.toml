@@ -1,0 +1,15 @@
+[package]
+name = "dpf-imp"
+version = "0.1.0"
+authors = ["Ruth-Ann Armstrong <ruthanna@stanford.edu>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+#prng = "0.1.1"
+#rand = "0.8.3"
+rand = "0.5.0"
+
+rand_chacha = "0.3.0"
+chacha20 = "0.6.0"
