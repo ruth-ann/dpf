@@ -1,5 +1,5 @@
 use rand;
-use rand::Rng;
+// use rand::Rng;
 use rand::distributions::{Distribution, Uniform};
 use std::str;
 use rand_chacha;
@@ -10,53 +10,107 @@ use rand::prelude::*;
 // use chacha20::cipher::{NewStreamCipher, SyncStreamCipher, SyncStreamCipherSeek}; https://docs.rs/chacha20/0.6.0/chacha20/
 // use   rand::CryptoRng;
 use rand::prng::chacha::ChaChaRng;
+
+
+use std::net::{TcpListener, TcpStream};
+use std::thread;
+use std::time::Duration;
+use prio::client;
+use prio::server;
+use prio::encrypt;
+// use openssl::rsa::Rsa;
+use prio::finite_field::*;
+extern crate pem;
+use std::io::{self, Write, BufRead};
+use pem::parse;
+use rand::{thread_rng, Rng};
 // use rand::prng;
-static GROUP_SIZE: u64 = 64;
-static SEC_PARAM: i64 = 4;
+static GROUP_SIZE: u64 = 65536;
+static GROUP_SIZE_SIGNED: i64 = 65536;
+
+static SEC_PARAM: i64 = 6;
 
 fn main() {
-    let result = gen(3, 65, 65);
-    println!("{:?}", result[0]);
-    println!("{:?}", result[1]);
-    let k = &result[0];
-    let check = eval(0, k.to_string(), 4, 3, 3);
+
+    // println!("1 1 1{:?}", 0 ^ 1 ^ 1);
+    // println!("1 1 1 1{:?}", 1 ^ 1 ^ 1 ^ 1);
+    println!("GENERATE");
+
+    let result = gen(6, 12, 1);
+    // println!("{:?}", result[0]);
+    // println!("{:?}", result[1]);
+    let k_0 = &result[0];
+    let k_1 = &result[1];
+    println!("EVAL");
+
+    let check_0 = eval(0, k_0.to_string(), 11, 6);
+    let check_1 = eval(1, k_1.to_string(), 11, 6);
+
+    // println!("CHECK 0 {:?}", check_0);
+    // println!("CHECK 1 {:?}", check_1);
+    println!("CHECK {:?}",  format!("{:b}", check_0 ^ check_1));
 
 }
 
 
-fn eval(b: u32, k_b: String, x:u32, sec_param:usize, n:usize)  -> i64{
+fn eval(b: u32, k_b: String, x:i64, sec_param:usize)  -> i64{
     let t_0 = b;
     let mut t_prev = t_0;
-    let mut ra = ChaChaRng::new_unseeded();
-    let p = 67;
+    let x_vec: Vec<char> = format!("{:b}", x).chars().collect();
+    let n = x_vec.len();
+    // println!("EVAL N {:?}", n);
+
+    
+    //parse k_b
     let mut cw_vec: Vec<String> = Vec::new();
     let s_0 =  u32::from_str_radix(&k_b[0..sec_param], 2).unwrap();
     let mut end = sec_param;
-    for i in 1..n{
+    // println!("K B {:?}", k_b);
+  
+    for i in 0..n{
         let cw_i = &k_b[end..end + sec_param + 2];
+        // println!("K_B {:?} i", &k_b[end..end + sec_param + 2]);
+
         end = end + sec_param + 2;
         cw_vec.push(cw_i.to_string());
-    }
-    // let cw_end = 56;
-    println!("{:?} end {:?} len {:?}", k_b, end, k_b.len());// TODO - how is this happening
+        // println!("EVAL CW {:?} ITER {:?}", cw_i, i);//yes
 
-    let cw_end =  i64::from_str_radix(&k_b[end..std::cmp::min(k_b.len(), 63)], 2).unwrap();
+    }
+    // let cw_end =  i64::from_str_radix(&k_b[end..std::cmp::min(k_b.len(), 64)], 2).unwrap();
+
+    let cw_end =  i64::from_str_radix(&k_b[end.. k_b.len()], 2).unwrap();
+    // println!("CW END {:?}", format!("{:b}", cw_end));//yes
+
+    // println!("DIFFERENCE {:?}", k_b.len() - end);
+
+    //println!("{:?} end {:?} len {:?}", k_b, end, k_b.len());// TODO - how is this happening
+
     let mut s_prev = s_0;
-    for i in 1..n{
-        let s_cw = &cw_vec[i - 1][0.. sec_param];
-        let t_l_cw = &cw_vec[i - 1][sec_param.. sec_param + 1];
-        let t_r_cw = &cw_vec[i - 1][sec_param + 1.. sec_param + 2];
+    for i in 0..n{
+        //parse correction word i
+        let s_cw = &cw_vec[i][0.. sec_param];
+        let t_l_cw = &cw_vec[i][sec_param.. sec_param + 1];
+        let t_r_cw = &cw_vec[i][sec_param + 1.. sec_param + 2];
+        let mut ra = ChaChaRng::new_unseeded();
+
         ra.set_stream(s_prev.into());
         let gen = ra.next_u32();
-        let check = format!("{}{}{}{}", s_cw, t_l_cw, s_cw, t_r_cw);
         let parse_concat = u32::from_str_radix(&format!("{}{}{}{}", s_cw, t_l_cw, s_cw, t_r_cw), 2).unwrap();
         let tau_i = gen ^ (t_prev * parse_concat);
+        println!("RUN {:?}", i);
+
+        //parse tau
         let tau_parse_str = format!("{:b}", tau_i);
+        println!("TAU {:?}", tau_parse_str);
+
         let s_l = u32::from_str_radix(&tau_parse_str[0..sec_param], 2).unwrap();
         let t_l = u32::from_str_radix(&tau_parse_str[sec_param..sec_param+1], 2).unwrap();
         let s_r =  u32::from_str_radix(&tau_parse_str[sec_param+1..2*sec_param + 1], 2).unwrap();
         let t_r = u32::from_str_radix(&tau_parse_str[2*sec_param+1..2*sec_param+2], 2).unwrap();//yes
-        if 1 == 1{
+        println!("EVAL S0L {:?}, T0L {:?}, S0R {:?}, T0R {:?}", format!("{:b}",s_l), format!("{:b}",t_l), format!("{:b}",s_r), format!("{:b}",t_r));
+        // println!("EVAL S1L {:?}, T1L {:?}, S1R {:?}, T1R {:?}", format!("{:b}",s_l), format!("{:b}",t_l), format!("{:b}",s_r), format!("{:b}",t_r));
+
+        if x_vec[i] == '0'{//TODO
             s_prev = s_l;
             t_prev = t_l;
 
@@ -64,80 +118,63 @@ fn eval(b: u32, k_b: String, x:u32, sec_param:usize, n:usize)  -> i64{
             s_prev = s_r;
             t_prev = t_r; 
         }
+        println!("___________________________");
+
     }
     let convert_ = convert(s_prev.into());
-//format!("{}{}{}{}", s_cw, t_l_cw, s_cw, t_r_cw), 2
-//let cw_end = i64::pow(-1, t1_prev) * (b - convert_0 + convert_1) % p; 
-//
-let return_ = i64::pow(-1, b) * (convert_ + 1 + cw_end) % p;  //to do - fix
-println!("{:?}", return_);
-return return_;
-
-
-}
-// fn main() {
-fn convert(s: u64) -> i64{
-    //convert
-    let secpar = 3;
-    let s:u64 = 238767;
-    let mut ra = ChaChaRng::new_unseeded();
-    let return_;
-    let mut rng = rand::thread_rng();
-    let v = rng.gen_range(0,GROUP_SIZE);
-    let m = power_of_two(v);
-    // println!("{:?}", m);
-
-    // println!("{:?}", v);
-    let mut bitmask:u64 = 1;
-    for _ in 1..m{
-        bitmask = (bitmask << 1) | 1;
+    let t:i64 =  t_prev.into();
+    let mut return_ = i64::pow(-1, b) * (convert_ + (t * cw_end)) % GROUP_SIZE_SIGNED;
+    if return_ < 0{
+        return_ += GROUP_SIZE_SIGNED;
     }
-    if m != -1{
-        if m <= SEC_PARAM{
-         
-            return_ = (bitmask & s) % GROUP_SIZE;//seens to eork
+    // println!("RETURN {:?}", return_);
+    return return_;
+}
 
-    // let rng = rand_chacha::ChaCha8Rng::from_seed(seed);
-    // let mut prng = rand_chacha::ChaCha8Rng::from_seed(s);
 
+fn convert(s: u64) -> i64{
+    let mut prng = ChaChaRng::new_unseeded();
+    prng.set_stream(s);
+    let gen_s:u64 = prng.next_u32().into();
+    let return_;
+    let result = power_of_two(GROUP_SIZE);
+ 
+    if result != -1{
+        let m = result;
+        let mut bitmask:u64 = 1;
+        //create bitmask for truncating s
+        for _ in 1..m{
+            bitmask = (bitmask << 1) | 1;
+        }
+        if m <= SEC_PARAM{   
+            return_ = (bitmask & s) % GROUP_SIZE;
         }else{
-            ra.set_stream(s);
-            let mut gen_s:u64 = ra.next_u32().into(); //may not be right
             return_ = (bitmask & gen_s) % GROUP_SIZE;
         }
     }else{
-        ra.set_stream(s);
-        let mut gen_s:u64 = ra.next_u32().into(); //may not be right
         return_ = gen_s % GROUP_SIZE;
     }
-
-    // if (x != 0) && ((x & (x - 1)) == 0);
     let signed = return_ as i64;
+    // println!("UNSIGNED CONVERT {:?}", return_);
+
+    // println!("CONVERT {:?}", signed);
     return signed;
-
-
-
 }
-// pub fn decrypt_share(share: &[u8], key: &PrivateKey) -> Result<Vec<u8>, EncryptError> {
 
 
 fn power_of_two(i: u64) -> i64{
     let mut check = i;
     let mut end = false;
     let mut m = 0;
-    let mut pow_2 = true;
     while !end{
         if check == 0{
-            pow_2 = false;
             m = -1;
             end = true;
         }else if check == 1{
             end = true;
         }else{
             if check & 1 == 1{
-                pow_2 = false;
                 m = -1;
-
                 end = true;
             }else{
                 check = check >> 1;
@@ -150,162 +187,168 @@ fn power_of_two(i: u64) -> i64{
 }
 //https://docs.rs/itertools/0.7.8/itertools/structs/struct.Groups.html
 
+fn pad_bits(s:String, len:usize) -> String{// Yes
+    let padded;
+    if  s.len() < len{
+        let extension = String::from_utf8(vec![b'0'; len - s.len()]).unwrap();
+        padded = format!("{}{}", extension, s);
+    }else{
+        padded = format!("{}", s);
+    }
+    return padded;
+}
 
-fn gen(sec_param: usize , a:u32, b:i64) -> Vec<String>{
-    let a = 8;
-    let b:i64 = 67;
-    let p = 88;
+
+fn gen(sec_param: usize , alpha:i64, beta:i64) -> Vec<String>{
 
     //bit decomposition of alpha
-    let a_vec: Vec<char> = format!("{:b}", a).chars().collect();
-    //length
-    let n = a_vec.len();
-
-    let mut rng = rand::thread_rng();
-    let g = sec_param;
+    let alpha_vec: Vec<char> = format!("{:b}", alpha).chars().collect();
+    let n = alpha_vec.len();
+    println!("N LENGTH {:?}", n);
 
     //randomly sample s_0 and s_1
+    let mut rng = rand::thread_rng();
     let mut s_0:u32 = 0;
     let mut s_1:u32 = 0;
- 
-    let mut ra = ChaChaRng::new_unseeded();
-
-
-
-    for _ in 0..g{
+    for _ in 0..sec_param{
         s_0 = (s_0 << 1)  | rng.gen_range(0,2);
         s_1 = (s_1 << 1)  | rng.gen_range(0,2);
 
     }
-    let cw = "";
-    let mut k_0 = format!("{:b}", s_0);
-    let mut k_1 = format!("{:b}", s_1);
-    let mut t0_prev:u32 = 0;
-    let mut t1_prev:u32 = 1;
+    // s_0 = 25;
+    // s_1 = 35;
     let mut s0_prev = s_0;
     let mut s1_prev = s_1;
 
-    for i in 1..n{
-        ra.set_stream(s0_prev.into());
-        let mut gen_s_0 = ra.next_u32();
-        //case alpha_i = 0
-        let mut alpha_i = 0;
-        let exp_0 = format!("{:b}", gen_s_0);
-        let s_l_0 = u32::from_str_radix(&exp_0[0..g], 2).unwrap();
-        let t_l_0 = u32::from_str_radix(&exp_0[g..g+1], 2).unwrap();
-        let s_r_0 =  u32::from_str_radix(&exp_0[g+1..2*g + 1], 2).unwrap();
-        let t_r_0 = u32::from_str_radix(&exp_0[2*g+1..2*g+2], 2).unwrap();//yes
+    //begin building k
+    let mut k_0 = pad_bits(format!("{:b}", s_0), sec_param);
+    let mut k_1 = pad_bits(format!("{:b}", s_1), sec_param);//correct length
+    println!("K_0 init {:?}", k_0);
+    println!("K_1 init {:?}", k_1);
 
-        let mut s_keep_0 = s_l_0; 
-        let mut s_lose_0 = s_r_0; 
-        let mut t_keep_0 = t_l_0; 
-        let mut t_lose_0 = t_r_0;
+
+    //initialize t-bits
+    let mut t0_prev:u32 = 0;
+    let mut t1_prev:u32 = 1;
+    println!("___________________________");
+
+    for i in 0..n{
+
+        //generate based on previous s0
+        let mut prng_0 = ChaChaRng::new_unseeded();
+        prng_0.set_stream(s0_prev.into());
+        let gen_s0 = prng_0.next_u32();
+        println!("RUN {:?}", i);
+
+        println!("GEN S_0 {:?}", format!("{:b}",gen_s0));
+     
+        //parse prng output
+        let gen_s0_bits = format!("{:b}", gen_s0);
+        let s0_l = u32::from_str_radix(&gen_s0_bits[0..sec_param], 2).unwrap();
+        let t0_l = u32::from_str_radix(&gen_s0_bits[sec_param..sec_param+1], 2).unwrap();
+        let s0_r =  u32::from_str_radix(&gen_s0_bits[sec_param+1..2*sec_param + 1], 2).unwrap();
+        let t0_r = u32::from_str_radix(&gen_s0_bits[2*sec_param+1..2*sec_param+2], 2).unwrap();//yes
+        println!("GEN S0L {:?}, T0L {:?}, S0R {:?}, T0R {:?}", format!("{:b}",s0_l), format!("{:b}",t0_l), format!("{:b}",s0_r), format!("{:b}",t0_r));
+
+
+        //default case alpha_i = 0
+        let mut alpha_i = 0;
+        let mut s0_keep = s0_l; 
+        let mut s0_lose = s0_r; 
+        let mut t0_keep = t0_l; 
+        let mut t0_lose = t0_r;
         let mut keep = 'l';
-        let mut lose = 'r';
-        if a_vec[i] == '1'{
-            s_keep_0 = s_r_0;
-            t_keep_0 = t_r_0;
-            s_lose_0 = s_l_0;
-            t_lose_0 = t_l_0;
+        //case alpha_i = 1
+        if alpha_vec[i] == '1'{
+            s0_keep = s0_r;
+            t0_keep = t0_r;
+            s0_lose = s0_l;
+            t0_lose = t0_l;
             alpha_i = 1;
             keep = 'r';
-            lose = 'l';
         }
 
+        //generate based on previous s1
+        let mut prng_1 = ChaChaRng::new_unseeded();
+        prng_1.set_stream(s1_prev.into());
+        let mut gen_s1 = prng_1.next_u32();
+        // println!("GEN S_1 {:?}", format!("{:b}",gen_s0));
 
+        //parse prng output
+        let gen_s1_bits = format!("{:b}", gen_s1);
+        let s1_l = u32::from_str_radix(&gen_s1_bits[0..sec_param], 2).unwrap();
+        let t1_l = u32::from_str_radix(&gen_s1_bits[sec_param..sec_param+1], 2).unwrap();
+        let s1_r =  u32::from_str_radix(&gen_s1_bits[sec_param+1..2*sec_param + 1], 2).unwrap();
+        let t1_r = u32::from_str_radix(&gen_s1_bits[2*sec_param+1..2*sec_param+2], 2).unwrap();//yes
+        // println!("GEN S1L {:?}, T1L {:?}, S1R {:?}, T1R {:?}", format!("{:b}",s1_l), format!("{:b}",t1_l), format!("{:b}",s1_r), format!("{:b}",t1_r));
 
-        ra.set_stream(s1_prev.into());
-        let mut gen_s_1 = ra.next_u32();
-        let exp_1 = format!("{:b}", gen_s_1);
-        let s_l_1 = u32::from_str_radix(&exp_1[0..g], 2).unwrap();
-        // println!("{}", intval);
-        let t_l_1 = u32::from_str_radix(&exp_1[g..g+1], 2).unwrap();
-        let s_r_1 =  u32::from_str_radix(&exp_1[g+1..2*g + 1], 2).unwrap();
-        let t_r_1 = u32::from_str_radix(&exp_1[2*g+1..2*g+2], 2).unwrap();//yes
-
-        let mut s_keep_1 = s_l_1; 
-        let mut s_lose_1 = s_r_1; 
-        let mut t_keep_1 = t_l_1; 
-        let mut t_lose_1 = t_r_1;
-        if a_vec[i] == '1'{
-            s_keep_1 = s_r_1;
-            t_keep_1 = t_r_1;
-            s_lose_1 = s_l_1;
-            t_lose_1 = t_l_1;
+        //default case alpha_i = 0
+        let mut s1_keep = s1_l; 
+        let mut s1_lose = s1_r; 
+        let mut t1_keep = t1_l; 
+        let mut t1_lose = t1_r;
+        //case alpha_i = 1
+        if alpha_vec[i] == '1'{
+            s1_keep = s1_r;
+            t1_keep = t1_r;
+            s1_lose = s1_l;
+            t1_lose = t1_l;
         }
 
+        let s_cw = s0_lose ^ s1_lose;
+        let t_cw_l = t0_l ^ t1_l ^ alpha_i ^ 1;
+        let t_cw_r = t0_r ^ t1_r ^ alpha_i;
 
-        let s_cw = s_lose_0 ^ s_lose_1;
-        let t_l_cw = t_l_0 ^ t_l_1 ^ alpha_i ^ 1;
-        let t_r_cw = t_r_0 ^ t_r_1 ^ alpha_i;
+        let cw_i = format!("{}{}{}", pad_bits(format!("{:b}", s_cw), sec_param), format!("{:b}", t_cw_l), format!("{:b}", t_cw_r));
+        //  println!("CW N {:?}", cw_i.len());
 
-        let cw_i = format!("{}{}{}", format!("{:b}", s_cw), format!("{:b}", t_l_cw), format!("{:b}", t_r_cw));
-        // print!("{:?}", cw_i);
+        let s0_i = s0_keep ^ (t0_prev * s_cw);
+        let s1_i = s1_keep ^ (t1_prev * s_cw);
 
-        let s_i_0 = (s_keep_0 ^ t0_prev) * s_cw;
-        let s_i_1 = (s_keep_1 ^ t1_prev) * s_cw;
-
-        let t_i_0;
-        let t_i_1;
+        let t0_i;
+        let t1_i;
 
         if keep == 'l'{
-            t_i_0 = (t_keep_0 ^ t0_prev) * t_l_cw;
-            t_i_1 = (t_keep_1 ^ t1_prev) * t_l_cw;
+            t0_i = t0_keep ^ (t0_prev * t_cw_l);
+            t1_i = t1_keep ^ (t1_prev * t_cw_l);
 
         }else{
-            t_i_0 = (t_keep_0 ^ t0_prev) * t_r_cw;
-            t_i_1 = (t_keep_1 ^ t1_prev) * t_r_cw;
+            t0_i = t0_keep ^ (t0_prev * t_cw_r);
+            t1_i = t1_keep ^ (t1_prev * t_cw_r);
         }
        
-        t0_prev = t_i_0;
-        t1_prev = t_i_1;
+        t0_prev = t0_i;
+        t1_prev = t1_i;
 
-        s0_prev = s_i_0;
-        s1_prev = s_i_1;
-        //line 12
+        s0_prev = s0_i;
+        s1_prev = s1_i;
 
-        // let my_int = from_str::<int>(my_str);
-
-        //line 5
-        //Generate using s_0 and s_1 as seeds -- how to split
-        //let mut prng = rand_chacha::ChaChaRng::from_seed(s);  - first gamma - get results from prng and chop up    
-
-        //operations on group elements
-        //group element represented by
-
-        //concatenation?
-
+        //build up key from correction words
         k_0 = format!("{}{}", k_0, cw_i);
         k_1 = format!("{}{}", k_1, cw_i);
+        // println!("CW LEN {:?} ITER {:?}", cw_i, i);
+        println!("___________________________");
+    }
 
+    //create and append last correction word
+    let convert_0 = convert(s0_prev.into());
+    let convert_1 = convert(s1_prev.into());
+    // println!("KEY LEN BEFORE {:?}", k_0.len());
+    // println!("BETA {:?}", beta);
+    // println!("CONVERT 0 {:?} CONVERT 1 {:?}", convert_0, convert_1);
+    // println!("RESULT {:?}", (beta - convert_0 + convert_1));
 
-}
+    // println!("RESULT MULT {:?}", i64::pow(-1, t1_prev) * (beta - convert_0 + convert_1));
 
-// println!("{:?}",k_0);
-// println!("{:?}",k_1);
-let convert_0 = convert(s0_prev.into());
-let convert_1 = convert(s1_prev.into());
+    let mut cw_end = i64::pow(-1, t1_prev) * (beta - convert_0 + convert_1) % GROUP_SIZE_SIGNED; //issue here
+    if cw_end < 0{
+        cw_end += GROUP_SIZE_SIGNED;
+    }
+            // println!("CW LEN {:?} ITER {:?}", cw_i.len(), i);
 
-let cw_end = i64::pow(-1, t1_prev) * (b - convert_0 + convert_1) % p; 
+    // println!("CW END GEN {:?}", format!("{:b}", cw_end));
+    k_0 = format!("{}{:b}", k_0, cw_end);
+    k_1 = format!("{}{:b}", k_1, cw_end);
 
-k_0 = format!("{}{:b}", k_0, cw_end);
-k_1 = format!("{}{:b}", k_1, cw_end);
-
-// println!("{:?}",k_0);
-// println!("{:?}",k_1);
-// let n:u64 = 2;
-// let mut rng = rand::thread_rng();
-
-// let mut ra = ChaChaRng::new_unseeded();
-// ra.set_stream(n);
-// println!("{:?}", ra.next_u32());
-// println!("{:?}", ra.next_u32());
-// let mut rng =  ChaChaRng::get_word_pos(1);
-// let mut ra = ChaCha20Rng::set_stream(n);
-
-// let key = Key::from_slice(b"an example very very secret key.");
-// let nonce = Nonce::from_slice(b"secret nonce");
-// let mut cipher = ChaCha20::new(&key, &nonce);
     return vec![k_0, k_1];
-
 }
