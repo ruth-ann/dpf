@@ -260,7 +260,7 @@ fn gen(sec_param: usize , alpha:i64, beta:i64) -> Vec<String>{
         println!("S_0 {:?} GEN S_0 {:?}",  format!("{:b}",s_0), format!("{:b}",gen_s0));
      
         //parse prng output
-        let gen_s0_bits = format!("0101010101010{:b}", gen_s0);
+        let gen_s0_bits = format!("{:b}0101010101010", gen_s0);
         let s0_l = u32::from_str_radix(&gen_s0_bits[0..sec_param], 2).unwrap();
         let t0_l = u32::from_str_radix(&gen_s0_bits[sec_param..sec_param+1], 2).unwrap();
         let s0_r =  u32::from_str_radix(&gen_s0_bits[sec_param+1..2*sec_param + 1], 2).unwrap();
