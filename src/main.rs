@@ -3,23 +3,14 @@ use rand;
 use rand::distributions::{Distribution, Uniform};
 use std::str;
 use rand_chacha;
-// use rand_chacha::ChaChaRng;
 use std::str::FromStr;
 use rand::prelude::*;
-// use chacha20::{ChaCha20, Key, Nonce};
-// use chacha20::cipher::{NewStreamCipher, SyncStreamCipher, SyncStreamCipherSeek}; https://docs.rs/chacha20/0.6.0/chacha20/
-// use   rand::CryptoRng;
 use rand::prng::chacha::ChaChaRng;
 
 
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 use std::time::Duration;
-use prio::client;
-use prio::server;
-use prio::encrypt;
-// use openssl::rsa::Rsa;
-use prio::finite_field::*;
 extern crate pem;
 use std::io::{self, Write, BufRead};
 use pem::parse;
@@ -28,27 +19,35 @@ use rand::{thread_rng, Rng};
 static GROUP_SIZE: u64 = 65536;
 static GROUP_SIZE_SIGNED: i64 = 65536;
 
-static SEC_PARAM: i64 = 6;
+static SEC_PARAM: i64 = 8;
+static SEC_PARAM_SIZE: usize = 8;
 
 fn main() {
+    println!("CASE ALPHA = X");
 
-    // println!("1 1 1{:?}", 0 ^ 1 ^ 1);
-    // println!("1 1 1 1{:?}", 1 ^ 1 ^ 1 ^ 1);
-    println!("GENERATE");
-
-    let result = gen(6, 12, 1);
-    // println!("{:?}", result[0]);
-    // println!("{:?}", result[1]);
+    let result = gen(SEC_PARAM_SIZE, 57, 1);
+    println!("KEY 0 {:?}", result[0]);
+    println!("KEY 1 {:?}", result[1]);
     let k_0 = &result[0];
     let k_1 = &result[1];
     println!("EVAL");
 
-    let check_0 = eval(0, k_0.to_string(), 11, 6);
-    let check_1 = eval(1, k_1.to_string(), 11, 6);
+    let check_0 = eval(0, k_0.to_string(), 57, SEC_PARAM_SIZE);
+    let check_1 = eval(1, k_1.to_string(), 57, SEC_PARAM_SIZE);
+    println!("EXPECTED: s||1; ACTUAL: {:?}",  format!("{:b}", check_0 ^ check_1));
 
-    // println!("CHECK 0 {:?}", check_0);
-    // println!("CHECK 1 {:?}", check_1);
-    println!("CHECK {:?}",  format!("{:b}", check_0 ^ check_1));
+
+    let result = gen(SEC_PARAM_SIZE, 57, 1);
+    println!("KEY 0 {:?}", result[0]);
+    println!("KEY 1 {:?}", result[1]);
+    let k_0 = &result[0];
+    let k_1 = &result[1];
+    println!("EVAL");
+
+    println!("CASE ALPHA =/= X");
+    let check_0 = eval(0, k_0.to_string(), 47, SEC_PARAM_SIZE);
+    let check_1 = eval(1, k_1.to_string(), 47, SEC_PARAM_SIZE);
+    println!("EXPECTED: 0; ACTUAL: {:?}",  format!("{:b}", check_0 ^ check_1));
 
 }
 
@@ -59,8 +58,9 @@ fn eval(b: u32, k_b: String, x:i64, sec_param:usize)  -> i64{
     let x_vec: Vec<char> = format!("{:b}", x).chars().collect();
     let n = x_vec.len();
     // println!("EVAL N {:?}", n);
-
     
+    println!("X VEC{:?}", format!("{:b}", x));
+
     //parse k_b
     let mut cw_vec: Vec<String> = Vec::new();
     let s_0 =  u32::from_str_radix(&k_b[0..sec_param], 2).unwrap();
@@ -69,22 +69,12 @@ fn eval(b: u32, k_b: String, x:i64, sec_param:usize)  -> i64{
   
     for i in 0..n{
         let cw_i = &k_b[end..end + sec_param + 2];
-        // println!("K_B {:?} i", &k_b[end..end + sec_param + 2]);
+        println!("CW {:?} ITER {:?}", cw_i, i);
 
         end = end + sec_param + 2;
         cw_vec.push(cw_i.to_string());
-        // println!("EVAL CW {:?} ITER {:?}", cw_i, i);//yes
-
     }
-    // let cw_end =  i64::from_str_radix(&k_b[end..std::cmp::min(k_b.len(), 64)], 2).unwrap();
-
     let cw_end =  i64::from_str_radix(&k_b[end.. k_b.len()], 2).unwrap();
-    // println!("CW END {:?}", format!("{:b}", cw_end));//yes
-
-    // println!("DIFFERENCE {:?}", k_b.len() - end);
-
-    //println!("{:?} end {:?} len {:?}", k_b, end, k_b.len());// TODO - how is this happening
-
     let mut s_prev = s_0;
     for i in 0..n{
         //parse correction word i
@@ -108,9 +98,9 @@ fn eval(b: u32, k_b: String, x:i64, sec_param:usize)  -> i64{
         let s_r =  u32::from_str_radix(&tau_parse_str[sec_param+1..2*sec_param + 1], 2).unwrap();
         let t_r = u32::from_str_radix(&tau_parse_str[2*sec_param+1..2*sec_param+2], 2).unwrap();//yes
         println!("EVAL S0L {:?}, T0L {:?}, S0R {:?}, T0R {:?}", format!("{:b}",s_l), format!("{:b}",t_l), format!("{:b}",s_r), format!("{:b}",t_r));
-        // println!("EVAL S1L {:?}, T1L {:?}, S1R {:?}, T1R {:?}", format!("{:b}",s_l), format!("{:b}",t_l), format!("{:b}",s_r), format!("{:b}",t_r));
+        println!("EVAL S1L {:?}, T1L {:?}, S1R {:?}, T1R {:?}", format!("{:b}",s_l), format!("{:b}",t_l), format!("{:b}",s_r), format!("{:b}",t_r));
 
-        if x_vec[i] == '0'{//TODO
+        if x_vec[i] == '0'{
             s_prev = s_l;
             t_prev = t_l;
 
@@ -118,6 +108,9 @@ fn eval(b: u32, k_b: String, x:i64, sec_param:usize)  -> i64{
             s_prev = s_r;
             t_prev = t_r; 
         }
+        println!("S PREV {:?}", format!("{:b}", s_prev));
+        println!("T PREV {:?}", t_prev);
+
         println!("___________________________");
 
     }
@@ -127,7 +120,6 @@ fn eval(b: u32, k_b: String, x:i64, sec_param:usize)  -> i64{
     if return_ < 0{
         return_ += GROUP_SIZE_SIGNED;
     }
-    // println!("RETURN {:?}", return_);
     return return_;
 }
 
@@ -155,9 +147,6 @@ fn convert(s: u64) -> i64{
         return_ = gen_s % GROUP_SIZE;
     }
     let signed = return_ as i64;
-    // println!("UNSIGNED CONVERT {:?}", return_);
-
-    // println!("CONVERT {:?}", signed);
     return signed;
 }
 
@@ -185,9 +174,8 @@ fn power_of_two(i: u64) -> i64{
     return m;
 
 }
-//https://docs.rs/itertools/0.7.8/itertools/structs/struct.Groups.html
 
-fn pad_bits(s:String, len:usize) -> String{// Yes
+fn pad_bits(s:String, len:usize) -> String{
     let padded;
     if  s.len() < len{
         let extension = String::from_utf8(vec![b'0'; len - s.len()]).unwrap();
@@ -205,6 +193,7 @@ fn gen(sec_param: usize , alpha:i64, beta:i64) -> Vec<String>{
     let alpha_vec: Vec<char> = format!("{:b}", alpha).chars().collect();
     let n = alpha_vec.len();
     println!("N LENGTH {:?}", n);
+    println!("ALPHA VEC {:?}", alpha_vec);
 
     //randomly sample s_0 and s_1
     let mut rng = rand::thread_rng();
@@ -215,8 +204,6 @@ fn gen(sec_param: usize , alpha:i64, beta:i64) -> Vec<String>{
         s_1 = (s_1 << 1)  | rng.gen_range(0,2);
 
     }
-    // s_0 = 25;
-    // s_1 = 35;
     let mut s0_prev = s_0;
     let mut s1_prev = s_1;
 
@@ -239,6 +226,10 @@ fn gen(sec_param: usize , alpha:i64, beta:i64) -> Vec<String>{
         prng_0.set_stream(s0_prev.into());
         let gen_s0 = prng_0.next_u32();
         println!("RUN {:?}", i);
+        println!("S0 PREV {:?}", format!("{:b}",s0_prev));
+        println!("S1 PREV {:?}", format!("{:b}",s1_prev));
+        println!("T0 PREV {:?}", format!("{:b}", t0_prev));
+        println!("T1 PREV {:?}", format!("{:b}", t1_prev));
 
         println!("GEN S_0 {:?}", format!("{:b}",gen_s0));
      
@@ -267,12 +258,13 @@ fn gen(sec_param: usize , alpha:i64, beta:i64) -> Vec<String>{
             alpha_i = 1;
             keep = 'r';
         }
+        println!("KEEP {:?} S0 KEEP {:?}, T0 KEEP {:?}, S0 LOSE {:?}, T0 LOSE {:?}", keep, format!("{:b}", s0_keep), format!("{:b}",t0_keep), format!("{:b}",s0_lose), format!("{:b}",t0_lose));
 
         //generate based on previous s1
         let mut prng_1 = ChaChaRng::new_unseeded();
         prng_1.set_stream(s1_prev.into());
         let mut gen_s1 = prng_1.next_u32();
-        // println!("GEN S_1 {:?}", format!("{:b}",gen_s0));
+        println!("GEN S_1 {:?}", format!("{:b}",gen_s1));
 
         //parse prng output
         let gen_s1_bits = format!("{:b}", gen_s1);
@@ -280,7 +272,7 @@ fn gen(sec_param: usize , alpha:i64, beta:i64) -> Vec<String>{
         let t1_l = u32::from_str_radix(&gen_s1_bits[sec_param..sec_param+1], 2).unwrap();
         let s1_r =  u32::from_str_radix(&gen_s1_bits[sec_param+1..2*sec_param + 1], 2).unwrap();
         let t1_r = u32::from_str_radix(&gen_s1_bits[2*sec_param+1..2*sec_param+2], 2).unwrap();//yes
-        // println!("GEN S1L {:?}, T1L {:?}, S1R {:?}, T1R {:?}", format!("{:b}",s1_l), format!("{:b}",t1_l), format!("{:b}",s1_r), format!("{:b}",t1_r));
+        println!("GEN S1L {:?}, T1L {:?}, S1R {:?}, T1R {:?}", format!("{:b}",s1_l), format!("{:b}",t1_l), format!("{:b}",s1_r), format!("{:b}",t1_r));
 
         //default case alpha_i = 0
         let mut s1_keep = s1_l; 
@@ -294,16 +286,26 @@ fn gen(sec_param: usize , alpha:i64, beta:i64) -> Vec<String>{
             s1_lose = s1_l;
             t1_lose = t1_l;
         }
+        println!("S1 KEEP {:?}, T1 KEEP {:?}, S1 LOSE {:?}, T1 LOSE {:?}", format!("{:b}", s1_keep), format!("{:b}",t1_keep), format!("{:b}",s1_lose), format!("{:b}",t1_lose));
 
         let s_cw = s0_lose ^ s1_lose;
+        println!("S CW {:?}", format!("{:b}",s_cw));
+
+
         let t_cw_l = t0_l ^ t1_l ^ alpha_i ^ 1;
         let t_cw_r = t0_r ^ t1_r ^ alpha_i;
+        println!("T CW L{:?}", format!("{:b}",t_cw_l));
+        println!("T CW R{:?}", format!("{:b}",t_cw_r));
 
         let cw_i = format!("{}{}{}", pad_bits(format!("{:b}", s_cw), sec_param), format!("{:b}", t_cw_l), format!("{:b}", t_cw_r));
-        //  println!("CW N {:?}", cw_i.len());
-
+         println!("CW N {:?} ITER {:?}", cw_i, i);
+         println!("S KEEP 0 {:?}", format!("{:b}",s0_keep));
+         println!("S KEEP 1 {:?}", format!("{:b}",s1_keep));
+ 
         let s0_i = s0_keep ^ (t0_prev * s_cw);
         let s1_i = s1_keep ^ (t1_prev * s_cw);
+        println!("S 0i {:?}", format!("{:b}",s0_i));
+        println!("S 1i {:?}", format!("{:b}",s1_i));
 
         let t0_i;
         let t1_i;
@@ -316,7 +318,9 @@ fn gen(sec_param: usize , alpha:i64, beta:i64) -> Vec<String>{
             t0_i = t0_keep ^ (t0_prev * t_cw_r);
             t1_i = t1_keep ^ (t1_prev * t_cw_r);
         }
-       
+        println!("T 0i {:?}", format!("{:b}",t0_i));
+        println!("T 1i {:?}", format!("{:b}",t1_i));
+
         t0_prev = t0_i;
         t1_prev = t1_i;
 
@@ -326,27 +330,17 @@ fn gen(sec_param: usize , alpha:i64, beta:i64) -> Vec<String>{
         //build up key from correction words
         k_0 = format!("{}{}", k_0, cw_i);
         k_1 = format!("{}{}", k_1, cw_i);
-        // println!("CW LEN {:?} ITER {:?}", cw_i, i);
         println!("___________________________");
     }
 
     //create and append last correction word
     let convert_0 = convert(s0_prev.into());
     let convert_1 = convert(s1_prev.into());
-    // println!("KEY LEN BEFORE {:?}", k_0.len());
-    // println!("BETA {:?}", beta);
-    // println!("CONVERT 0 {:?} CONVERT 1 {:?}", convert_0, convert_1);
-    // println!("RESULT {:?}", (beta - convert_0 + convert_1));
-
-    // println!("RESULT MULT {:?}", i64::pow(-1, t1_prev) * (beta - convert_0 + convert_1));
 
     let mut cw_end = i64::pow(-1, t1_prev) * (beta - convert_0 + convert_1) % GROUP_SIZE_SIGNED; //issue here
     if cw_end < 0{
         cw_end += GROUP_SIZE_SIGNED;
     }
-            // println!("CW LEN {:?} ITER {:?}", cw_i.len(), i);
-
-    // println!("CW END GEN {:?}", format!("{:b}", cw_end));
     k_0 = format!("{}{:b}", k_0, cw_end);
     k_1 = format!("{}{:b}", k_1, cw_end);
 

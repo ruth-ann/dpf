@@ -36,7 +36,7 @@ fn main() {
         for _ in 0..num_clients {
             let priv_key1 = encrypt::PrivateKey::from_base64(
                 "BNNOqoU54GPo+1gTPv+hCgA9U2ZCKd76yOMrWa1xTWgeb4LhFLMQIQoRwDVaW64g\
-                /WTdcxT4rDULoycUNFB60LER6hPEHg/ObBnRPV1rwS3nj9Bj0tbjVPPyL9p8QW8B+w==", //TODO- generate different private keys
+                /WTdcxT4rDULoycUNFB60LER6hPEHg/ObBnRPV1rwS3nj9Bj0tbjVPPyL9p8QW8B+w==",
             ).unwrap();
         
             let priv_key2 = encrypt::PrivateKey::from_base64(
